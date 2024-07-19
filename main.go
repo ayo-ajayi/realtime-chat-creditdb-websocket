@@ -97,17 +97,17 @@ func (r *Router) handleWS(c *gin.Context) {
 	}
 
 	db := r.dbclient
-	if err := db.SetUserOnline(recipient); err != nil {
+	if err := db.SetUserOnline(c, recipient); err != nil {
 		log.Println(err)
 		return
 	}
-	defer db.SetUserOffline(recipient)
+	defer db.SetUserOffline(c, recipient)
 	userConnectionsMutex.Lock()
 	userConnections[recipient] = &Client{conn}
 	userConnectionsMutex.Unlock()
 
 	m := Message{Recipient: recipient, Sender: sender}
-	messages, err := db.RetrieveStoredMessages(m)
+	messages, err := db.RetrieveStoredMessages(c,m)
 	if err != nil {
 		log.Println(err)
 		return
@@ -159,7 +159,7 @@ func (r *Router) sendMessage(c *gin.Context) {
 	message.Sender = req.Sender
 	broadcast <- message
 	db := r.dbclient
-	if err := db.StoreMessage(message); err != nil {
+	if err := db.StoreMessage(c, message); err != nil {
 		log.Println(err)
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -180,8 +180,8 @@ func broadcastMessages() {
 	}
 }
 
-func (db *DBClient) SetUserOnline(userid string) error {
-	onlineUsers, err := db.GetLine(context.Background(), "online_users")
+func (db *DBClient) SetUserOnline(ctx context.Context,userid string) error {
+	onlineUsers, err := db.GetLine(ctx, "online_users")
 	if err != nil {
 		if err != creditdb.ErrNotFound {
 			return err
@@ -212,15 +212,15 @@ func (db *DBClient) SetUserOnline(userid string) error {
 		return err
 	}
 
-	if err := db.SetLine(context.Background(), "online_users", string(data)); err != nil {
+	if err := db.SetLine(ctx, "online_users", string(data)); err != nil {
 
 		return err
 	}
 	return nil
 }
 
-func (db *DBClient) SetUserOffline(userid string) error {
-	onlineUsers, err := db.GetLine(context.Background(), "online_users")
+func (db *DBClient) SetUserOffline(ctx context.Context,userid string) error {
+	onlineUsers, err := db.GetLine(ctx, "online_users")
 	if err != nil {
 		return err
 	}
@@ -242,14 +242,14 @@ func (db *DBClient) SetUserOffline(userid string) error {
 	if err != nil {
 		return err
 	}
-	if err := db.SetLine(context.Background(), "online_users", string(data)); err != nil {
+	if err := db.SetLine(ctx, "online_users", string(data)); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (db *DBClient) GetUsersOnline() ([]string, error) {
-	onlineUsers, err := db.GetLine(context.Background(), "online_users")
+func (db *DBClient) GetUsersOnline(ctx context.Context,) ([]string, error) {
+	onlineUsers, err := db.GetLine(ctx, "online_users")
 	if err != nil {
 		return nil, err
 	}
@@ -260,8 +260,8 @@ func (db *DBClient) GetUsersOnline() ([]string, error) {
 	return oUsers, nil
 }
 
-func (db *DBClient) StoreMessage(message Message) error {
-	messages, err := db.GetLine(context.Background(), "user:messages:"+message.Sender+":"+message.Recipient)
+func (db *DBClient) StoreMessage(ctx context.Context,message Message) error {
+	messages, err := db.GetLine(ctx, "user:messages:"+message.Sender+":"+message.Recipient)
 	if err != nil {
 		if err != creditdb.ErrNotFound {
 			return err
@@ -278,14 +278,14 @@ func (db *DBClient) StoreMessage(message Message) error {
 	if err != nil {
 		return err
 	}
-	if err := db.SetLine(context.Background(), "user:messages:"+message.Sender+":"+message.Recipient, string(data)); err != nil {
+	if err := db.SetLine(ctx, "user:messages:"+message.Sender+":"+message.Recipient, string(data)); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (db *DBClient) RetrieveStoredMessages(m Message) ([]Message, error) {
-	mess, err := db.GetLine(context.Background(), "user:messages:"+m.Sender+":"+m.Recipient)
+func (db *DBClient) RetrieveStoredMessages(ctx context.Context,m Message) ([]Message, error) {
+	mess, err := db.GetLine(ctx, "user:messages:"+m.Sender+":"+m.Recipient)
 	if err != nil {
 		if err != creditdb.ErrNotFound {
 			return nil, err
